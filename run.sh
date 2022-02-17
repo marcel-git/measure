@@ -1,2 +1,4 @@
 #!/usr/bin/env bash
-sudo python3 send.py && python3 read.py
+sh -c 'exec python3 script.py'
+sh -c 'exec python3 tcpClient.py &'
+sh -c 'exec python3 script.py'

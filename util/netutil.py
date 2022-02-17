@@ -12,11 +12,14 @@ def get_mac_for_ip(iface,src, target):
 
     with socket.socket(socket.PF_PACKET, socket.SOCK_RAW) as sock:
         sock.bind((iface,ethernet.ETH_TYPE_ARP))
-
+        
+        print("test1")
         sniffobj = sniff(iface=iface, count=1, promisc=1, filters=f"arp and dst host {local_ip}")
+        print("test2")
         sock.send(bytes(arp.build()))
-
+        print("test3")
     for len, t , buf in sniffobj:
+        print(len)
         parsed = parse.Packet(buf, len)
         return parsed.smac
 
@@ -42,6 +45,7 @@ class TCP:
             sport=self.sport,
             dport=self.dport,
             flags=self.flags,
+            win=502,
             seq=self.seq,
             ack=self.ack,
         )
