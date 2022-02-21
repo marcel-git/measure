@@ -11,14 +11,11 @@ class Pcap:
 
         self.errBuff = ct.create_string_buffer(pcap.PCAP_ERRBUF_SIZE)
         
-        #devlist = ct.POINTER(pcap.pcap_if_t)()
-        #pcap.findalldevs(ct.byref(devlist),self.errBuff)
-        #pcap.freealldevs(devlist)
-
         self.device = b'eno1'
         
         self.errBuff[0] = b"\0"
     
+    #Erzeugt pcap Instanz um die Probes mit Timestamps zu versehen
     def activate(self):
         ts.clear()
         
@@ -26,23 +23,18 @@ class Pcap:
         
         pcap.set_timeout(self.pd,1000)
         pcap.set_promisc(self.pd,0)
-    
-        #struct = ct.pointer(ct.pointer(ct.c_int(-1)))
-        #pcap.list_tstamp_types(self.pd,struct)
-        #content = struct.contents
-        
+         
         status = pcap.set_tstamp_type(self.pd, pcap.PCAP_TSTAMP_ADAPTER_UNSYNCED)
-        #status = pcap.set_tstamp_type(self.pd, pcap.PCAP_TSTAMP_ADAPTER)
         
         if status!=0:
             print(f"[~] Warning: {pcap.statustostr(status)}")
             print(f"[~] Timestamping set to HOST")
         else:
-            print("[+] Timestamping set to PCAP_TSTAMP_ADAPTER_UNSYNCED")
+            #print("[+] Timestamping set to PCAP_TSTAMP_ADAPTER_UNSYNCED")
         
         pcap.activate(self.pd)
         
-        #erstelle filter, sodass nur die Probes eingefangen werden
+        #Erstelle filter, sodass nur die Probes eingefangen werden
         fcode = pcap.bpf_program()
         cmdbuf = "tcp[tcpflags] == tcp-syn|tcp-ack and port 55555".encode('utf-8')
         
@@ -53,12 +45,13 @@ class Pcap:
         nonblock = 1
         if pcap.setnonblock(self.pd,nonblock,self.errBuff)==-1:
             print("[!] Setting mode to nonblocking failed!")
-
+    
+    #Stoppt das fangen via pcap und wertet die empfangenen Pakete aus
     def deactivate(self, count):
         while True:
             
             packet_count = ct.c_int(0)
-            #für jedes gefangene packet wird die Handler Funktion aufgerufen
+            #Für jedes gefangene packet wird die Handler Funktion aufgerufen
             status = pcap.dispatch(self.pd, count, self.packetHandler, ct.cast(ct.pointer(packet_count), ct.POINTER(ct.c_ubyte)))
             
             if status < 0:
@@ -71,10 +64,10 @@ class Pcap:
         pcap.close(self.pd)
         sys.stdout.flush()
         return ts
-
+    
+    #Handler für die dispatch Funktion
     @pcap.pcap_handler
     def packetHandler(arg, hdr, pkt):
-        #packet enthält die TS als ts struct in Sekunden und Mikrosekunden 
-        #print(f"[>]: {hdr.contents.ts.tv_sec}.{hdr.contents.ts.tv_usec}")
+        #Paket enthält die TS als ts struct in Sekunden und Mikrosekunden 
         ts.append(float(str(hdr.contents.ts.tv_sec)+"."+str(hdr.contents.ts.tv_usec)))
         

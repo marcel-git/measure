@@ -25,13 +25,14 @@ def get_mac_for_ip(iface,src, target):
 
 def fetch_local_details():
     iface_name = get_first_iface()
-    #get own ip and mac adress
+    #Holt sich die eigene IP und MAC Adresse
     with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as s:
         s.connect(('10.255.255.255',1))
         local_ip = s.getsockname()[0]
     local_eth_adr = gma()
     return (iface_name,local_ip, local_eth_adr)
 
+#Wrapper Klasse für dpkt TCP Pakete
 class TCP:
     def __init__(self, sport, dport, flags, seq=0, ack=0):
         self.sport = sport
@@ -51,6 +52,7 @@ class TCP:
         )
         return t
 
+#Wrapper Klasse für dpkt IP Pakete
 class IP:
     def __init__(self,src,dst,tcp):
         src_ip, src_mac = src
@@ -79,6 +81,7 @@ class IP:
         )
         return e
 
+#Wrapper Klasse für dpkt ARP Pakete
 class ARP:
     def __init__(self,src,target):
         local_ip, local_eth_adr = src
