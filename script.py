@@ -33,7 +33,7 @@ def setup():
 
     #get local ip and mac adress
     iface_name, local_ip, local_eth_adr = fetch_local_details()
-    iface_name = "eno1"
+    iface_name = "lo"
     print(f'[+] Interface set to {iface_name}!')
     print(f'[+] IP {local_ip} and mac address {local_eth_adr} for the local device')
     local_eth_adr = bytes.fromhex(local_eth_adr.replace(":", " "))
@@ -49,17 +49,18 @@ def setup():
 
 #Sendet die bereits erstellten Pakete in Reihenfolge
 def launch_attack(probes, sock, msNum):
-    pcap = Pcap()
-    pcap.activate()
+    #pcap = Pcap()
+    #pcap.activate()
 
     for pkt in probes:
        status =  sock.send(bytes(pkt))
 
-    timestamps = pcap.deactivate(msNum)
-    
-    diff = timestamps[1] - timestamps[0]
-    diffMs = diff*1000.0
-    return diffMs
+    #timestamps = pcap.deactivate(msNum)
+
+    #diff = timestamps[1] - timestamps[0]
+    #diffMs = diff*1000.0
+    return 0;
+    #return diffMs
 
 def main():
     
@@ -102,14 +103,14 @@ def main():
     tcpP = TCP(sport=55555, dport=target_port, flags=[dpkt.tcp.TH_SYN])
     ipP = IP((local_ip,local_eth_adr), (target_ip,target_eth_adr), tcpP.build())
     
-    probes = [ipP.build()] + spoofed + [ipP.build()]
-    
+    #probes = [ipP.build()] + spoofed + [ipP.build()]
+    probes = spoofed
     name = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     with open(f"logs/{name}.csv","a") as logFile:
         
         logFile.write("values\n")
         
-        for i in range(0,100):
+        for i in range(0,1):
             print(f"[+] {i+1}/100",end="\r")
             with socket.socket(socket.AF_PACKET, socket.SOCK_RAW, dpkt.ip.IP_PROTO_IP) as sock:
                 sock.bind((iface_name,1))

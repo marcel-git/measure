@@ -1,4 +1,5 @@
 #include <asm-generic/socket.h>
+#include <bits/types/struct_iovec.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -105,15 +106,14 @@ static int create_socket(char *interface){
 		printf("Interface set to: %s\n", interface);
 	}
 	
-
 	return s;
 }
 
-void build_tcp(char *sHost, int sPort, char *dHost, int dPort, char *payload, struct msghdr *message){
+void build_tcp(char *sHost, int sPort, char *dHost, int dPort, char *payload, struct msghdr *message, struct iovec * iov, char *datagram){
 	//Datagram to represent the packet and zero out buffer
-	char datagram[4096] , source_ip[32] , *data , *pseudogram; 
-	memset (datagram, 0, 4096);
-	
+	char source_ip[32] , *data , *pseudogram; 
+	memset(datagram, 0, 4096);
+
 	//IP header
 	struct iphdr *iph = (struct iphdr *) datagram;
 	
@@ -177,10 +177,9 @@ void build_tcp(char *sHost, int sPort, char *dHost, int dPort, char *payload, st
 	memcpy(pseudogram + sizeof(struct pseudo_header) , tcph , sizeof(struct tcphdr) + strlen(data));
 	
 	tcph->check = csum( (unsigned short*) pseudogram , psize);
-	
-    struct iovec iov[1];
-    iov[0].iov_base = &datagram;        //pointer to data
-    iov[0].iov_len = iph->tot_len;      //size of data
+  
+	iov->iov_base = datagram;	 //pointer to data
+	iov->iov_len = iph->tot_len; //size of data
 
     int ret;
     struct addrinfo *ainfo;
@@ -193,15 +192,11 @@ void build_tcp(char *sHost, int sPort, char *dHost, int dPort, char *payload, st
 
     //node, service, hints, result
     ret = getaddrinfo(dHost, NULL, &hints, &ainfo);
-	struct msghdr msg = {};
-    msg.msg_name = ainfo->ai_addr;          //optional address/socket name
-    msg.msg_namelen = ainfo->ai_addrlen;    //size of address
-    msg.msg_iov = iov;                      //iovec array
-    msg.msg_iovlen = 1;                     //elements in array
-	
-	//"copy" the struct to the address the pointer points to
-	*message = msg;
-	//return message;
+    message->msg_name = ainfo->ai_addr;          //optional address/socket name
+    message->msg_namelen = ainfo->ai_addrlen;    //size of address
+    message->msg_iov = iov;                      //iovec array
+    message->msg_iovlen = 1;                     //elements in array
+
 }
 
 void do_tcp(int sock){	
@@ -218,35 +213,33 @@ void do_tcp(int sock){
     struct mmsghdr messages[10];
     memset(messages, 0, sizeof(messages));
 
-	struct msghdr probe = {};
-	struct msghdr spoofed = {};
+	struct msghdr hdr_probe = {};
+	struct msghdr hdr_spoofed = {};
+	char dgram_probe[4096] = "";
+	char dgram_spoofed[4096] = "";
+	struct iovec iov_probe = {};
+	struct iovec iov_spoofed = {};
 
-	printf("(B) Probe: %p\n",&probe);
-	printf("(B) Spoofed: %p\n",&spoofed);
+	char *dgram_ptr_probe = (char *) &dgram_probe;
+	char *dgram_ptr_spoofed = (char *) &dgram_spoofed;
+	struct iovec *iov_ptr_probe = &iov_probe;
+	struct iovec *iov_ptr_spoofed = &iov_spoofed; 
 
-	build_tcp("192.168.0.197", 10000, "1.2.3.4", 22222, "Probe", &probe);
-	build_tcp("192.168.0.197", 10000, "1.2.3.4", 10010, "Spoofed", &spoofed);
-
-	printf("(A) Probe: %p\n",&probe);
-	printf("(A) Spoofed: %p\n",&spoofed);
+	build_tcp("192.168.0.197", 10000, "1.2.3.4", 22222, "Probe", &hdr_probe, iov_ptr_probe ,dgram_ptr_probe);
+	build_tcp("192.168.0.197", 10000, "1.2.3.4", 10010, "Spoofed", &hdr_spoofed, iov_ptr_spoofed, dgram_ptr_spoofed);;
 
 	//probe and spoofed contain the same content at this point, but WHY?
 
-	messages[0].msg_hdr = probe;
-	messages[1].msg_hdr = spoofed;
-	messages[2].msg_hdr = spoofed;
-	messages[3].msg_hdr = spoofed;
-	messages[4].msg_hdr = spoofed;
-	messages[5].msg_hdr = spoofed;
-	messages[6].msg_hdr = spoofed;
-	messages[7].msg_hdr = spoofed;
-	messages[8].msg_hdr = spoofed;
-	messages[9].msg_hdr = probe;
-
-	int i;
-    /*for(i = 1; i<9; i++){
-        messages[i].msg_hdr = message;
-    }*/
+	messages[0].msg_hdr = hdr_probe;
+	messages[1].msg_hdr = hdr_spoofed;
+	messages[2].msg_hdr = hdr_spoofed;
+	messages[3].msg_hdr = hdr_spoofed;
+	messages[4].msg_hdr = hdr_spoofed;
+	messages[5].msg_hdr = hdr_spoofed;
+	messages[6].msg_hdr = hdr_spoofed;
+	messages[7].msg_hdr = hdr_spoofed;
+	messages[8].msg_hdr = hdr_spoofed;
+	messages[9].msg_hdr = hdr_probe;
 
     int retval;
     retval = sendmmsg(sock, messages, 10, 0);
@@ -273,7 +266,7 @@ int main(void){
     dHost = "1.2.3.4";
     dPort = 10010;
     batch_size = 10;
-	interface = ""; //leave empty for autoset
+	interface = "lo"; //leave empty for autoset
 
 	int sockfd = create_socket(interface);
 	do_tcp(sockfd);
