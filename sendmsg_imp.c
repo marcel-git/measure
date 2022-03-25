@@ -242,14 +242,14 @@ void do_tcp(int sock){
 	messages[9].msg_hdr = hdr_probe;
 
     int retval;
-    retval = sendmmsg(sock, messages, 10, 0);
-    if (retval == -1){
-        perror("sendmmsg()");
-        exit(1);
-    }
-    else{
-        printf("%d messages sent\n", retval);
-    }
+	for(int i = 0; i<10; i++){
+    	retval = sendmsg(sock, &hdr_probe, 0);
+    	if (retval == -1){
+        	perror("sendmsg()");
+        	exit(1);
+    	}
+	}
+
 
 }
 
