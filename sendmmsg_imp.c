@@ -1,3 +1,4 @@
+#include <linux/if_ether.h>
 #define _GNU_SOURCE
 #include <asm-generic/socket.h>
 #include <bits/types/struct_iovec.h>
@@ -98,30 +99,68 @@ static int create_socket(char *interface){
 	return s;
 }
 
-void build_tcp(char *sHost, int sPort, char *dHost, int dPort, char *payload, struct msghdr *message, struct iovec * iov, char *datagram){
+void build_tcp(char *sHost, int sPort, char *dHost, int dPort, char *payload, struct msghdr *message, struct iovec * iov, char *datagram, char *smac, char *dmac){
 	//Datagram to represent the packet and zero out buffer
 	char source_ip[32] , *data , *pseudogram; 
 	memset(datagram, 0, 4096);
 
+
+	int source_mac[6];
+	int dest_mac[6];
+	sscanf(smac, "%x:%x:%x:%x:%x:%x", &source_mac[0], &source_mac[1], &source_mac[2], &source_mac[3], &source_mac[4], &source_mac[5]);
+	sscanf(dmac, "%x:%x:%x:%x:%x:%x", &dest_mac[0], &dest_mac[1], &dest_mac[2], &dest_mac[3], &dest_mac[4], &dest_mac[5]);
+	
+	unsigned char source[6];
+	unsigned char dest[6];
+
+	for(int i = 0; i < 6; i++){
+		source[i] = (char)source_mac[i];
+		dest[i] = (char)dest_mac[i];
+	}
+
+	//Ethernet header
+	struct ethhdr *eh = (struct ethhdr *) datagram;
+	eh->h_proto = htons(ETH_P_IP);
+	eh->h_source[0] = source[0];
+	eh->h_source[1] = source[1];
+	eh->h_source[2] = source[2];
+	eh->h_source[3] = source[3];
+	eh->h_source[4] = source[4];
+	eh->h_source[5] = source[5];
+	eh->h_dest[0] = dest[0];
+	eh->h_dest[1] = dest[1];
+	eh->h_dest[2] = dest[2];
+	eh->h_dest[3] = dest[3];
+	eh->h_dest[4] = dest[4];
+	eh->h_dest[5] = dest[5];
+
+	//debug info
+	printf("Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\n", eh->h_source[0], eh->h_source[1], eh->h_source[2], eh->h_source[3], eh->h_source[4], eh->h_source[5]);
+	printf("Destination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\n", eh->h_dest[0], eh->h_dest[1], eh->h_dest[2], eh->h_dest[3], eh->h_dest[4], eh->h_dest[5]);
+
 	//IP header
-	struct iphdr *iph = (struct iphdr *) datagram;
+	struct iphdr *iph = (struct iphdr *)(datagram + sizeof(struct ethhdr));
+
 	
 	//TCP header
-	struct tcphdr *tcph = (struct tcphdr *) (datagram + sizeof (struct ip));
+	struct tcphdr *tcph = (struct tcphdr *) (datagram + sizeof(struct ethhdr) + sizeof(struct iphdr));
+
 	struct sockaddr_in sin;
 	struct pseudo_header psh;
-	
+
 	//Data part
-	data = datagram + sizeof(struct iphdr) + sizeof(struct tcphdr);
+	data = datagram + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct tcphdr);
 	strcpy(data , (char *) payload);
-	
+
 	//address resolution
 	strcpy(source_ip , (char *) sHost);
 	sin.sin_family = AF_INET;
 	sin.sin_port = htons(80);
 	sin.sin_addr.s_addr = inet_addr ((char *) dHost);
+
 	
 	//Fill in the IP Header
+
 	iph->ihl = 5;
 	iph->version = 4;
 	iph->tos = 0;
@@ -133,8 +172,22 @@ void build_tcp(char *sHost, int sPort, char *dHost, int dPort, char *payload, st
 	iph->check = 0;		//Set to 0 before calculating checksum
 	iph->saddr = inet_addr ( source_ip );	//Spoof the source ip address
 	iph->daddr = sin.sin_addr.s_addr;
+	
 	//Ip checksum
 	iph->check = csum ((unsigned short *) datagram, iph->tot_len);
+
+	//debug info
+	printf("IP Header\n");
+	printf("   |-IP Version        : %d\n",(unsigned int)iph->version);
+	printf("   |-IP Header Length  : %d DWORDS or %d Bytes\n",(unsigned int)iph->ihl,((unsigned int)(iph->ihl))*4);
+	printf("   |-Type Of Service   : %d\n",(unsigned int)iph->tos);
+	printf("   |-IP Total Length   : %d  Bytes(Size of Packet)\n",ntohs(iph->tot_len));
+	printf("   |-Identification    : %d\n",ntohs(iph->id));
+	printf("   |-TTL      : %d\n",(unsigned int)iph->ttl);
+	printf("   |-Protocol : %d\n",(unsigned int)iph->protocol);
+	printf("   |-Checksum : %d\n",ntohs(iph->check));
+	printf("   |-Source IP        : %u\n",iph->saddr);
+	printf("   |-Destination IP   : %u\n",iph->daddr);
 	
 	//TCP Header
 	tcph->source = htons (sPort);
@@ -151,13 +204,29 @@ void build_tcp(char *sHost, int sPort, char *dHost, int dPort, char *payload, st
 	tcph->window = htons (5840);	/* maximum allowed window size */
 	tcph->check = 0;	//leave checksum 0 now, filled later by pseudo header
 	tcph->urg_ptr = 0;
-	
-	//Now the TCP checksum
+
 	psh.source_address = inet_addr( source_ip );
 	psh.dest_address = sin.sin_addr.s_addr;
 	psh.placeholder = 0;
 	psh.protocol = IPPROTO_TCP;
 	psh.tcp_length = htons(sizeof(struct tcphdr) + strlen(data) );
+
+	//debug
+	printf("TCP Header\n");
+	printf("   |-Source Port      : %u\n",ntohs(tcph->source));
+	printf("   |-Destination Port : %u\n",ntohs(tcph->dest));
+	printf("   |-Sequence Number    : %u\n",ntohl(tcph->seq));
+	printf("   |-Acknowledge Number : %u\n",ntohl(tcph->ack_seq));
+	printf("   |-Header Length      : %d DWORDS or %d BYTES\n" ,(unsigned int)tcph->doff,(unsigned int)tcph->doff*4);
+	printf("   |-Urgent Flag          : %d\n",(unsigned int)tcph->urg);
+	printf("   |-Acknowledgement Flag : %d\n",(unsigned int)tcph->ack);
+	printf("   |-Push Flag            : %d\n",(unsigned int)tcph->psh);
+	printf("   |-Reset Flag           : %d\n",(unsigned int)tcph->rst);
+	printf("   |-Synchronise Flag     : %d\n",(unsigned int)tcph->syn);
+	printf("   |-Finish Flag          : %d\n",(unsigned int)tcph->fin);
+	printf("   |-Window         : %d\n",ntohs(tcph->window));
+	printf("   |-Checksum       : %d\n",ntohs(tcph->check));
+	printf("   |-Urgent Pointer : %d\n",tcph->urg_ptr);
 	
 	int psize = sizeof(struct pseudo_header) + sizeof(struct tcphdr) + strlen(data);
 	pseudogram = malloc(psize);
@@ -214,19 +283,17 @@ void do_tcp(int sock){
 	struct iovec *iov_ptr_probe = &iov_probe;
 	struct iovec *iov_ptr_spoofed = &iov_spoofed; 
 
-	build_tcp("192.168.0.197", 10000, "1.2.3.4", 22222, "Probe", &hdr_probe, iov_ptr_probe ,dgram_ptr_probe);
-	build_tcp("192.168.0.197", 10000, "1.2.3.4", 10010, "Spoofed", &hdr_spoofed, iov_ptr_spoofed, dgram_ptr_spoofed);;
-
-	//probe and spoofed contain the same content at this point, but WHY?
+	build_tcp("192.168.0.197", 10000, "1.2.3.4", 22222, "Probe", &hdr_probe, iov_ptr_probe ,dgram_ptr_probe, "f8:59:71:ec:fd:1f", "ff:ff:ff:ff:ff:ff");
+	build_tcp("192.168.0.197", 10000, "1.2.3.4", 10010, "Spoofed", &hdr_spoofed, iov_ptr_spoofed, dgram_ptr_spoofed, "f8:59:71:ec:fd:1f", "ff:ff:ff:ff:ff:ff");
 
 	messages[0].msg_hdr = hdr_probe;
 	messages[1].msg_hdr = hdr_spoofed;
 	messages[2].msg_hdr = hdr_spoofed;
-	messages[3].msg_hdr = hdr_spoofed;
+	messages[3].msg_hdr = hdr_probe;
 	messages[4].msg_hdr = hdr_spoofed;
-	messages[5].msg_hdr = hdr_spoofed;
+	messages[5].msg_hdr = hdr_probe;
 	messages[6].msg_hdr = hdr_spoofed;
-	messages[7].msg_hdr = hdr_spoofed;
+	messages[7].msg_hdr = hdr_probe;
 	messages[8].msg_hdr = hdr_spoofed;
 	messages[9].msg_hdr = hdr_probe;
 

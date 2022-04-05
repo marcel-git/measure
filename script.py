@@ -59,7 +59,7 @@ def launch_attack(probes, sock, msNum):
 
     #diff = timestamps[1] - timestamps[0]
     #diffMs = diff*1000.0
-    return 0;
+    return 0
     #return diffMs
 
 def main():
@@ -103,8 +103,8 @@ def main():
     tcpP = TCP(sport=55555, dport=target_port, flags=[dpkt.tcp.TH_SYN])
     ipP = IP((local_ip,local_eth_adr), (target_ip,target_eth_adr), tcpP.build())
     
-    #probes = [ipP.build()] + spoofed + [ipP.build()]
-    probes = spoofed
+    probes = [ipP.build()] + spoofed + [ipP.build()]
+    #probes = spoofed
     name = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     with open(f"logs/{name}.csv","a") as logFile:
         
