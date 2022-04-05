@@ -1,5 +1,6 @@
-#include <linux/if_ether.h>
 #define _GNU_SOURCE
+#include <linux/if_ether.h>
+#include <netinet/in.h>
 #include <asm-generic/socket.h>
 #include <bits/types/struct_iovec.h>
 #include <string.h>
@@ -104,6 +105,23 @@ void build_tcp(char *sHost, int sPort, char *dHost, int dPort, char *payload, st
 	char source_ip[32] , *data , *pseudogram; 
 	memset(datagram, 0, 4096);
 
+	//Eth header
+	struct ethhdr *eh = (struct ethhdr *) datagram;
+
+	//IP header
+	struct iphdr *iph = (struct iphdr *)(datagram + sizeof(struct ethhdr));
+
+	
+	//TCP header
+	struct tcphdr *tcph = (struct tcphdr *) (datagram + sizeof(struct ethhdr) + sizeof(struct iphdr));
+
+	struct sockaddr_in sin;
+	struct pseudo_header psh;
+
+	//Data part
+	data = datagram + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct tcphdr);
+	strcpy(data , (char *) payload);
+
 
 	int source_mac[6];
 	int dest_mac[6];
@@ -114,12 +132,11 @@ void build_tcp(char *sHost, int sPort, char *dHost, int dPort, char *payload, st
 	unsigned char dest[6];
 
 	for(int i = 0; i < 6; i++){
-		source[i] = (char)source_mac[i];
-		dest[i] = (char)dest_mac[i];
+		source[i] = source_mac[i];
+		dest[i] = dest_mac[i];
 	}
 
 	//Ethernet header
-	struct ethhdr *eh = (struct ethhdr *) datagram;
 	eh->h_proto = htons(ETH_P_IP);
 	eh->h_source[0] = source[0];
 	eh->h_source[1] = source[1];
@@ -137,20 +154,6 @@ void build_tcp(char *sHost, int sPort, char *dHost, int dPort, char *payload, st
 	//debug info
 	printf("Source MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\n", eh->h_source[0], eh->h_source[1], eh->h_source[2], eh->h_source[3], eh->h_source[4], eh->h_source[5]);
 	printf("Destination MAC: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\n", eh->h_dest[0], eh->h_dest[1], eh->h_dest[2], eh->h_dest[3], eh->h_dest[4], eh->h_dest[5]);
-
-	//IP header
-	struct iphdr *iph = (struct iphdr *)(datagram + sizeof(struct ethhdr));
-
-	
-	//TCP header
-	struct tcphdr *tcph = (struct tcphdr *) (datagram + sizeof(struct ethhdr) + sizeof(struct iphdr));
-
-	struct sockaddr_in sin;
-	struct pseudo_header psh;
-
-	//Data part
-	data = datagram + sizeof(struct ethhdr) + sizeof(struct iphdr) + sizeof(struct tcphdr);
-	strcpy(data , (char *) payload);
 
 	//address resolution
 	strcpy(source_ip , (char *) sHost);
@@ -283,8 +286,8 @@ void do_tcp(int sock){
 	struct iovec *iov_ptr_probe = &iov_probe;
 	struct iovec *iov_ptr_spoofed = &iov_spoofed; 
 
-	build_tcp("192.168.0.197", 10000, "1.2.3.4", 22222, "Probe", &hdr_probe, iov_ptr_probe ,dgram_ptr_probe, "f8:59:71:ec:fd:1f", "ff:ff:ff:ff:ff:ff");
-	build_tcp("192.168.0.197", 10000, "1.2.3.4", 10010, "Spoofed", &hdr_spoofed, iov_ptr_spoofed, dgram_ptr_spoofed, "f8:59:71:ec:fd:1f", "ff:ff:ff:ff:ff:ff");
+	build_tcp("192.168.0.197", 10000, "1.2.3.4", 22222, "Probe", &hdr_probe, iov_ptr_probe ,dgram_ptr_probe, "f8:59:71:ec:fd:1f", "f8:59:71:ec:fd:1f");
+	build_tcp("192.168.0.197", 10000, "1.2.3.4", 10010, "Spoofed", &hdr_spoofed, iov_ptr_spoofed, dgram_ptr_spoofed, "f8:59:71:ec:fd:1f", "f8:59:71:ec:fd:1f");
 
 	messages[0].msg_hdr = hdr_probe;
 	messages[1].msg_hdr = hdr_spoofed;
